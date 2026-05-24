@@ -1,11 +1,10 @@
 # app.py
 # Aplicação completa da Equação de Balbi com geração de PDF
+# Autor: Vinícius Cabral Balbi
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
 import io
@@ -15,13 +14,11 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
 
 # Importar o núcleo de cálculos
 from balbi_core import (
     TipoDuto, Duto, Fluido, Regime,
-    calcular_dh_e_area, calcular_equacao_balbi, calcular_comparativo_completo,
-    calcular_alfa, resolver_colebrook
+    calcular_dh_e_area, calcular_equacao_balbi, calcular_comparativo_completo
 )
 
 # Configuração da página
@@ -59,14 +56,6 @@ st.markdown("""
         margin-bottom: 1rem;
         border: 1px solid #e0e0e0;
     }
-    .card-title {
-        font-size: 1.1rem;
-        font-weight: bold;
-        color: #003366;
-        margin-bottom: 0.8rem;
-        border-left: 4px solid #0066cc;
-        padding-left: 0.8rem;
-    }
     .resultado-grande {
         font-size: 2rem;
         font-weight: bold;
@@ -100,7 +89,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Função para gerar PDF Memorial
+# ==================== FUNÇÃO PARA GERAR PDF ====================
 def gerar_memorial_pdf(duto: Duto, fluido: Fluido, vazao_m3h: float, 
                        resultado_balbi, resultado_comp,
                        equal_friction_value, static_v0, static_eta) -> bytes:
@@ -175,7 +164,6 @@ def gerar_memorial_pdf(duto: Duto, fluido: Fluido, vazao_m3h: float,
     story.append(Paragraph(f"• Velocidade média: v_m = Q/A = {resultado_balbi.vm_ms:.4f} m/s", estilo_normal))
     story.append(Paragraph(f"• Número de Reynolds: Re = (v_m × D_h) / ν = ({resultado_balbi.vm_ms:.4f} × {resultado_balbi.dh_m:.6f}) / {fluido.nu_m2_s:.2e} = {resultado_balbi.re:.0f}", estilo_normal))
     
-    # Classificação do regime
     if resultado_balbi.re <= 2000:
         regime_class = "LAMINAR (Re ≤ 2000)"
     elif resultado_balbi.re <= 4000:
@@ -251,7 +239,6 @@ def gerar_memorial_pdf(duto: Duto, fluido: Fluido, vazao_m3h: float,
     story.append(Paragraph("6. MÉTODOS COMPARATIVOS", estilo_heading))
     story.append(Spacer(1, 2*mm))
     
-    # Tabela comparativa
     tabela_comparativa = [
         ["Método", "ΔP/L (Pa/m)", "ΔP total (Pa)", "Característica"],
         ["🏆 Equação de Balbi", f"{resultado_balbi.dpl_pa_m:.6f}", f"{resultado_balbi.dp_total_pa:.6f}", "Explícito, não iterativo, capta rugosidade"],
@@ -278,10 +265,8 @@ def gerar_memorial_pdf(duto: Duto, fluido: Fluido, vazao_m3h: float,
     story.append(Spacer(1, 2*mm))
     
     diff_balbi_cole = ((resultado_balbi.dpl_pa_m - resultado_comp.colebrook_pa_m) / resultado_comp.colebrook_pa_m * 100) if resultado_comp.colebrook_pa_m > 0 else 0
-    diff_cole_zhang = ((resultado_comp.zhang_sarica_pa_m - resultado_comp.colebrook_pa_m) / resultado_comp.colebrook_pa_m * 100) if resultado_comp.colebrook_pa_m > 0 else 0
     
     story.append(Paragraph(f"• Diferença Equação de Balbi vs Colebrook-White: {diff_balbi_cole:+.1f}%", estilo_normal))
-    story.append(Paragraph(f"• Diferença Zhang & Sarica vs Colebrook-White: {diff_cole_zhang:+.1f}%", estilo_normal))
     story.append(Spacer(1, 2*mm))
     
     story.append(Paragraph("Análise qualitativa:", estilo_heading2))
@@ -307,12 +292,14 @@ def gerar_memorial_pdf(duto: Duto, fluido: Fluido, vazao_m3h: float,
     story.append(Paragraph("---", estilo_normal))
     story.append(Paragraph("<b>Documento gerado automaticamente pela Calculadora da Equação de Balbi</b>", estilo_normal))
     story.append(Paragraph("Autor: Vinícius Cabral Balbi | ASHRAE Member", estilo_normal))
-    story.append(Paragraph("Método: Resistência Entrópica do Fluido | https://github.com/balbi/equacao-balbi", estilo_normal))
+    story.append(Paragraph("Método: Resistência Entrópica do Fluido", estilo_normal))
     
-    # Construir PDF
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+# ==================== INTERFACE PRINCIPAL ====================
 
 # Cabeçalho
 st.markdown("""
@@ -454,15 +441,13 @@ with col5:
 st.markdown("---")
 col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-# Determinar badge do regime
-regime = resultado_balbi.regime
-if regime == Regime.LAMINAR:
+if resultado_balbi.regime == Regime.LAMINAR:
     badge_class = "badge-laminar"
     regime_text = "Laminar"
-elif regime == Regime.TRANSICAO:
+elif resultado_balbi.regime == Regime.TRANSICAO:
     badge_class = "badge-transicao"
     regime_text = "Transição"
-elif regime == Regime.TURBULENTO:
+elif resultado_balbi.regime == Regime.TURBULENTO:
     badge_class = "badge-turbulento"
     regime_text = "Turbulento Industrial"
 else:
@@ -548,4 +533,106 @@ with col2:
 
 # Linha 4: Perfil de velocidades
 st.markdown("---")
-st.markdown("## 📈 Perfil de
+st.markdown("## 📈 Perfil de Velocidades")
+
+R = resultado_balbi.raio_m
+lambda_m = resultado_balbi.lambda_m
+alfa = resultado_balbi.alfa
+vmax = resultado_balbi.vmax_ms
+vm = resultado_balbi.vm_ms
+
+r_values = np.linspace(0, R, 50)
+dist_parede = R - r_values
+termo_exp = np.power(dist_parede / lambda_m, alfa)
+u_balbi = vmax * (1 - np.exp(-termo_exp))
+
+u_cole = vmax * np.power(dist_parede / R, 1/7)
+u_cole = np.where(dist_parede > 0, u_cole, 0)
+
+u_lam = 2 * vm * (1 - (r_values/R)**2)
+
+fig_perfil = go.Figure()
+fig_perfil.add_trace(go.Scatter(x=r_values, y=u_balbi, mode='lines', name='Equação de Balbi', line=dict(color='#006400', width=3)))
+fig_perfil.add_trace(go.Scatter(x=r_values, y=u_cole, mode='lines', name='Lei de Potência 1/7 (Nikuradse)', line=dict(color='#003366', dash='dash')))
+if resultado_balbi.regime == Regime.LAMINAR:
+    fig_perfil.add_trace(go.Scatter(x=r_values, y=u_lam, mode='lines', name='Perfil Laminar (Poiseuille)', line=dict(color='#888', dash='dot')))
+fig_perfil.update_layout(
+    title=f"Perfil de Velocidades - Duto {dimensao_text}",
+    xaxis_title="Coordenada Radial r (m)",
+    yaxis_title="Velocidade u(r) (m/s)",
+    height=450,
+    template="plotly_white",
+    hovermode="x unified"
+)
+st.plotly_chart(fig_perfil, use_container_width=True)
+
+# Linha 5: Tabela comparativa detalhada
+st.markdown("---")
+st.markdown("## 📋 Tabela Comparativa Detalhada")
+
+df_comparacao = pd.DataFrame([
+    {"Método": "🏆 Equação de Balbi", "ΔP/L (Pa/m)": f"{resultado_balbi.dpl_pa_m:.4f}", "ΔP Total (Pa)": f"{resultado_balbi.dp_total_pa:.4f}", "Característica": "Explícito, não iterativo, capta rugosidade, α(Re) contínuo"},
+    {"Método": "Colebrook-White", "ΔP/L (Pa/m)": f"{resultado_comp.colebrook_pa_m:.4f}", "ΔP Total (Pa)": f"{resultado_comp.colebrook_pa_m * duto.comprimento_m:.4f}", "Característica": "Implícito, exige iteração, capta rugosidade, padrão industrial"},
+    {"Método": "Static Regain", "ΔP/L (Pa/m)": f"{resultado_comp.static_regain_pa_m:.4f}", "ΔP Total (Pa)": f"{resultado_comp.static_regain_pa_m * duto.comprimento_m:.4f}", "Característica": f"Empírico, depende de v₀={static_v0} m/s, η={static_eta}%"},
+    {"Método": "Equal Friction", "ΔP/L (Pa/m)": f"{resultado_comp.equal_friction_pa_m:.4f}", "ΔP Total (Pa)": f"{resultado_comp.equal_friction_pa_m * duto.comprimento_m:.4f}", "Característica": f"Arbitrário, valor fixo = {equal_friction_value} Pa/m, ignora rugosidade"},
+    {"Método": "Zhang & Sarica (2005)", "ΔP/L (Pa/m)": f"{resultado_comp.zhang_sarica_pa_m:.4f}", "ΔP Total (Pa)": f"{resultado_comp.zhang_sarica_pa_m * duto.comprimento_m:.4f}", "Característica": "Correlação empírica para multifásico, f = 0,316·Re⁻⁰·²⁵ (Blasius)"}
+])
+
+st.dataframe(df_comparacao, use_container_width=True, hide_index=True)
+
+# Linha 6: Parâmetros da Equação de Balbi (expander)
+with st.expander("🔬 Ver detalhes dos parâmetros da Equação de Balbi"):
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"""
+        **Parâmetros geométricos:**
+        - Área A = {resultado_balbi.area_m2:.6f} m²
+        - Perímetro P = {resultado_balbi.perimetro_m:.6f} m
+        - D_h = {resultado_balbi.dh_m:.6f} m
+        - Raio R = {resultado_balbi.raio_m:.6f} m
+        
+        **Parâmetros do escoamento:**
+        - v_m = {resultado_balbi.vm_ms:.4f} m/s
+        - Re = {resultado_balbi.re:.0f}
+        - α = {resultado_balbi.alfa:.6f}
+        - v_max = {resultado_balbi.vmax_ms:.4f} m/s
+        """)
+    with col2:
+        st.markdown(f"""
+        **Parâmetros característicos:**
+        - k_Balbi = {resultado_balbi.k_balbi:.6f}
+        - λ = {resultado_balbi.lambda_m:.3e} m = {resultado_balbi.lambda_m*1e6:.3f} μm
+        
+        **Perda de carga:**
+        - ΔP/L = {resultado_balbi.dpl_pa_m:.6f} Pa/m
+        - ΔP total = {resultado_balbi.dp_total_pa:.6f} Pa
+        
+        **Relação Balbi vs Colebrook:**
+        - Diferença = {((resultado_balbi.dpl_pa_m - resultado_comp.colebrook_pa_m) / resultado_comp.colebrook_pa_m * 100) if resultado_comp.colebrook_pa_m > 0 else 0:.1f}%
+        """)
+
+# Linha 7: Botão para gerar PDF
+st.markdown("---")
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("📄 Gerar Memorial PDF Completo", use_container_width=True):
+        with st.spinner("Gerando PDF... aguarde"):
+            pdf_bytes = gerar_memorial_pdf(
+                duto, fluido, vazao,
+                resultado_balbi, resultado_comp,
+                equal_friction_value, static_v0, static_eta
+            )
+            b64 = base64.b64encode(pdf_bytes).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="memorial_balbi_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf">📥 Clique aqui para baixar o PDF</a>'
+            st.markdown(href, unsafe_allow_html=True)
+            st.success("PDF gerado com sucesso!")
+
+# Rodapé
+st.markdown("""
+<div class="footer">
+    <p><strong>📐 Fórmulas da Equação de Balbi</strong></p>
+    <p>λ = (ν / v_m) × k_Balbi | ΔP/L = (2 × μ × v_max × α) / (R × λ) / 1000</p>
+    <p>k_Balbi = 0,042 × Re^0,25 × (ε / D_h)^0,1 (Regime Turbulento Industrial) | α(Re) = 1 + 1 / [1 + (Re/2800)⁴]</p>
+    <p>© 2025 Equação de Balbi · Vinícius Cabral Balbi · HVAC Technician and Designer - ASHRAE Member</p>
+</div>
+""", unsafe_allow_html=True)
